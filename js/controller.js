@@ -1,5 +1,8 @@
 "use strict";
 
+// load WebExtension polyfill in MV3 service worker using absolute URL
+try { importScripts(chrome.runtime.getURL("js/external/webextension-polyfill.min.js")); } catch (err) {}
+
 var extensionSettings = getExtensionSettings();
 
 setupController();
@@ -30,23 +33,24 @@ async function extensionSettingsChanged() {
 	// extension now disabled?
 	else if (!extensionSettings.extensionEnabled && prevSettings.extensionEnabled) {
 		browser.runtime.onInstalled.removeListener(onFirstInstall);
-		browser.tabs.onUpdated.removeListener(onTabNavigation);
-
 		console.log("(controller) finished, ready for shutdown");
 	}
+
+	// update content script registration for any change
+	await registerOrUpdateContentScript();
 }
 
 async function setupController() {
 	console.log("(controller) starting initial setup");
 
 	browser.runtime.onInstalled.addListener(onFirstInstall);
-	browser.tabs.onUpdated.addListener(onTabNavigation);
 
 	browser.storage.onChanged.addListener(extensionSettingsChanged);
 	extensionSettings = await extensionSettings;
 
 	if (extensionSettings.extensionEnabled) {
 		console.log("(controller) extension enabled");
+		await registerOrUpdateContentScript();
 	}
 	else {
 		console.log("(controller) extension disabled, skipping initialization");
@@ -90,11 +94,14 @@ async function onTabNavigation(tabID,changeInfo,tab) {
 
 					for (let sitePattern of extensionSettings.sites) {
 						if (matchURL(sitePattern,pageURLGroups)) {
-							await browser.tabs.executeScript(tabID,{
-								file: "/js/external/webextension-polyfill.min.js",
+							// MV3: use scripting API to inject scripts into the tab
+							await browser.scripting.executeScript({
+								target: { tabId: tabID },
+								files: [ "js/external/webextension-polyfill.min.js" ],
 							});
-							await browser.tabs.executeScript(tabID,{
-								file: "/js/inject-gum-patch.js",
+							await browser.scripting.executeScript({
+								target: { tabId: tabID },
+								files: [ "js/inject-gum-patch.js" ],
 							});
 							return;
 						}
@@ -167,4 +174,58 @@ function handleAck(ack,bridgeEntry) {
 
 function isPromise(v) {
 	return (v && typeof v == "object" && typeof v.then == "function");
+}
+
+// Register or update a content script that runs at document_start in MAIN world
+async function registerOrUpdateContentScript() {
+	try {
+		if (!extensionSettings || !extensionSettings.extensionEnabled) {
+			await unregisterContentScriptSafe("gum-patch");
+			return;
+		}
+
+		let matches = buildMatchesFromSites(extensionSettings.sites || []);
+		if (!matches.length) {
+			await unregisterContentScriptSafe("gum-patch");
+			return;
+		}
+
+		// Replace existing registration
+		await unregisterContentScriptSafe("gum-patch");
+		await browser.scripting.registerContentScripts([{
+			id: "gum-patch",
+			js: ["js/patch-gum.js"],
+			matches,
+			allFrames: true,
+			runAt: "document_start",
+			world: "MAIN",
+			persistAcrossSessions: true,
+		}]);
+	}
+	catch (err) {
+		console.log(err);
+	}
+}
+
+async function unregisterContentScriptSafe(id) {
+	try {
+		await browser.scripting.unregisterContentScripts({ ids: [id] });
+	}
+	catch (err) {}
+}
+
+function buildMatchesFromSites(sites) {
+	var matches = [];
+	for (let site of sites) {
+		// convert * scheme to both http and https
+		let m = site.match(/^(\*|https?):\/\/(.*)$/);
+		if (!m) continue;
+		let scheme = m[1];
+		let rest = m[2];
+		let schemes = (scheme == "*") ? ["http","https"] : [scheme];
+		for (let sch of schemes) {
+			matches.push(`${sch}://${rest}`);
+		}
+	}
+	return matches;
 }

@@ -1,5 +1,5 @@
 {
-	"manifest_version": 2,
+	"manifest_version": 3,
 	"name": "HD Camera Feed in Video Calls",
 	"author": "Kyle Simpson",
 	"version": "1",
@@ -13,23 +13,24 @@
 		"128": "images/logo-128.png"
 	},
 	"options_ui": {
-		"page": "settings.html",
-		"chrome_style": true
+		"page": "settings.html"
 	},
 	"background": {
-		"scripts": [
-			"js/external/webextension-polyfill.min.js",
-			"js/controller.js"
-		],
-		"persistent": false
+		"service_worker": "js/controller.js"
 	},
 	"content_scripts": [],
 	"web_accessible_resources": [
-		"js/patch-gum.js"
+		{
+			"resources": ["js/patch-gum.js"],
+			"matches": ["<all_urls>"]
+		}
 	],
 	"permissions": [
-		"https://*/*",
 		"storage",
+		"scripting",
 		"tabs"
+	],
+	"host_permissions": [
+		"https://*/*"
 	]
 }
