@@ -23,7 +23,10 @@ async function getExtensionSettings() {
 async function extensionSettingsChanged() {
 	console.log("(controller) extension settings changed");
 
-	var prevSettings = extensionSettings;
+    var prevSettings = extensionSettings;
+    if (isPromise(prevSettings)) {
+        prevSettings = await prevSettings;
+    }
 	extensionSettings = await getExtensionSettings();
 
 	// extension now enabled?

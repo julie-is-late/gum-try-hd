@@ -32,8 +32,6 @@
 	}
 
 	async function getUserMedia(constraints){
-		var editedConstraints = JSON.parse(JSON.stringify(constraints));
-
 		if (constraints && constraints.video) {
 			let editedConstraints = JSON.parse(JSON.stringify(constraints));
 
