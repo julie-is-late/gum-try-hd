@@ -194,12 +194,10 @@ async function registerOrUpdateContentScript() {
 		await unregisterContentScriptSafe("gum-patch");
 		await browser.scripting.registerContentScripts([{
 			id: "gum-patch",
-			js: ["js/patch-gum.js"],
+			js: ["js/inject-gum-patch.js"],
 			matches,
 			allFrames: true,
 			runAt: "document_start",
-			world: "MAIN",
-			persistAcrossSessions: true,
 		}]);
 	}
 	catch (err) {
